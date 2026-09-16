@@ -1,11 +1,10 @@
-"""Vendor-only endpoints (server-side RBAC): AI workspace, matching, intelligence."""
-import random
+"""Vendor-only endpoints (server-side RBAC): AI workspace, matching, intelligence, AMIE."""
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from ..ai import copilot, forecast, listing_gen, logistics, matching, pricing
+from ..ai import copilot, feasibility, forecast, listing_gen, logistics, matching, pricing
 from ..ai.data import CROPS, LOCATIONS, crop_name, crop_meta
 from ..auth import require_vendor
 from ..db import BuyerRequest, Listing, User, VendorProfile, get_db
@@ -106,15 +105,16 @@ def intelligence_outlook(user: User = Depends(require_vendor), db: Session = Dep
         base = sum(prices) / len(prices)
         prev_week = pricing._recent_prices(db, slug, days=30)[:14]
         trend = (base - (sum(prev_week) / len(prev_week))) / (sum(prev_week) / len(prev_week)) if prev_week else 0
-        # synthetic supply/demand balance from demand level + price pressure
-        demand_level = f["current_level"]
-        supply_pressure = random.uniform(0.7, 1.5)  # placeholder until real supply telemetry
-        ratio = (demand_level / 50.0) / supply_pressure  # 50 = neutral demand level
-        if ratio > 1.15:
+        # Real supply/demand balance from live listings vs stated buyer demand
+        analysis = feasibility.analyze_market(feasibility.extract_market_stats(db, slug, vp.district or "Ernakulam"))
+        balance = analysis["balance_ratio"]
+        if balance is None:
+            risk, label = "MEDIUM", "Insufficient live data"
+        elif balance > 1.15:
             risk, label = "LOW", "Demand outpaces supply"
-        elif ratio > 0.9:
+        elif balance > 0.9:
             risk, label = "MEDIUM", "Balanced market"
-        elif ratio > 0.7:
+        elif balance > 0.65:
             risk, label = "HIGH", "Supply exceeding demand"
         else:
             risk, label = "CRITICAL", "Significant surplus expected"
@@ -125,6 +125,8 @@ def intelligence_outlook(user: User = Depends(require_vendor), db: Session = Dep
             "price_avg": round(base, 1),
             "price_trend_pct": round(trend * 100, 1),
             "demand_7d_pct": f["next_7d_pct"],
+            "listed_supply_kg": analysis["listed_supply_kg"],
+            "stated_demand_kg": analysis["stated_demand_kg"],
             "surplus_risk": risk,
             "risk_label": label,
             "confidence": f["confidence"],
@@ -176,6 +178,47 @@ def intelligence_simulate(body: dict, user: User = Depends(require_vendor), db: 
         },
         "confidence": f["confidence"],
     }
+
+
+# --- AMIE: market feasibility engine (AMIE_Final_Revised_PRD.md) ------------
+
+@router.get("/amie/scenarios")
+def amie_scenarios(user: User = Depends(require_vendor)):
+    """List available disturbance scenarios (PRD §18)."""
+    return [{"name": k, "label": v} for k, v in feasibility.SCENARIOS.items()]
+
+
+@router.post("/amie/analyze")
+def amie_analyze(body: dict, user: User = Depends(require_vendor), db: Session = Depends(get_db)):
+    """Full AMIE run: market analysis → cascading day-by-day simulation →
+    bottlenecks → critical commitments → interventions → counterfactual."""
+    crop = body.get("crop", "tomato")
+    if crop not in CROPS:
+        raise HTTPException(status_code=400, detail="Unknown crop.")
+    horizon = int(body.get("horizon_days", 7))
+    scenario_name = body.get("scenario", "synchronized_harvest")
+    if scenario_name not in feasibility.SCENARIOS:
+        raise HTTPException(status_code=400, detail="Unknown scenario.")
+    seed = int(body.get("seed", 42))
+    stats = feasibility.extract_market_stats(db, crop, user.vendor_profile.district or "Ernakulam")
+    return feasibility.run_amie(stats, horizon, scenario_name, seed)
+
+
+@router.post("/amie/counterfactual")
+def amie_counterfactual(body: dict, user: User = Depends(require_vendor), db: Session = Depends(get_db)):
+    """Re-simulate with a user-chosen intervention combination (PRD §28)."""
+    crop = body.get("crop", "tomato")
+    if crop not in CROPS:
+        raise HTTPException(status_code=400, detail="Unknown crop.")
+    selection = body.get("interventions", [])
+    stats = feasibility.extract_market_stats(db, crop, user.vendor_profile.district or "Ernakulam")
+    return feasibility.simulate_selection(
+        stats,
+        int(body.get("horizon_days", 7)),
+        body.get("scenario", "synchronized_harvest"),
+        int(body.get("seed", 42)),
+        selection,
+    )
 
 
 @router.post("/copilot")

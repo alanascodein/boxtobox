@@ -19,7 +19,6 @@ const CROPS = [
 export default function SellPage() {
   const router = useRouter();
   const [stage, setStage] = useState<"capture" | "analyzing" | "review" | "done">("capture");
-  const [voiceText, setVoiceText] = useState("");
   const [manualCrop, setManualCrop] = useState("");
   const [qty, setQty] = useState("");
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
@@ -31,19 +30,21 @@ export default function SellPage() {
 
   async function analyze() {
     setError("");
-    if (!voiceText.trim() && !manualCrop) {
-      setError("Describe your harvest (e.g. \"30 kg green chilli harvested today\") or pick the crop manually.");
+    if (!manualCrop) {
+      setError("Pick the crop to continue.");
+      return;
+    }
+    if (!qty || Number(qty) <= 0) {
+      setError("Enter the quantity in kg.");
       return;
     }
     setStage("analyzing");
     try {
       const a = await api<Analysis>("/api/vendor/ai/analyze-harvest", {
         method: "POST",
-        body: JSON.stringify({ crop_hint: voiceText, quantity_kg: qty ? Number(qty) : null }),
+        body: JSON.stringify({ crop_hint: manualCrop, quantity_kg: Number(qty) }),
       });
       setAnalysis(a);
-      setQty((prev) => prev || (a.quantity_kg ? String(a.quantity_kg) : "30"));
-      setPrice(String(Math.round(((a.suggested_price_range.min + a.suggested_price_range.max) / 2) * 10) / 10));
       // generate listing text
       const gen = await api<{ title: string; description: string }>("/api/vendor/ai/generate-listing", {
         method: "POST",
@@ -69,7 +70,7 @@ export default function SellPage() {
         body: JSON.stringify({
           crop: manualCrop || analysis?.crop, title: listing.title, description: listing.description,
           quantity_kg: Number(qty), price_per_kg: Number(price), quality_grade: analysis?.estimated_quality || "A",
-          ai_generated: true,
+          ai_generated: false,
         }),
       });
       setPublishedId(l.id);
@@ -84,11 +85,11 @@ export default function SellPage() {
   return (
     <div className="animate-fadeUp">
       <h1 className="font-display text-3xl font-bold tracking-tight">Sell a harvest</h1>
-      <p className="mt-1 text-stone-500">Three steps: describe → review AI analysis → publish.</p>
+      <p className="mt-1 text-stone-500">Three steps: enter details → review AI price → publish.</p>
 
       {/* Stepper */}
       <div className="mt-6 flex items-center gap-2 text-xs font-semibold">
-        {["Describe", "Review", "Publish"].map((s, i) => {
+        {["Enter details", "Review", "Publish"].map((s, i) => {
           const idx = ["capture", "review", "done"].indexOf(stage === "analyzing" ? "capture" : stage);
           const active = i === Math.max(0, idx);
           return (
@@ -101,28 +102,23 @@ export default function SellPage() {
 
       {stage === "capture" && (
         <div className="card mt-6 p-8">
-          <div className="mx-auto grid max-w-xl place-items-center rounded-3xl border-2 border-dashed border-brand-200 bg-brand-50/50 p-10 text-center">
-            <span className="text-5xl">📸</span>
-            <div className="mt-3 font-display text-lg font-bold">Photograph or describe your harvest</div>
-            <p className="mt-1 text-sm text-stone-500">
-              In production this uses your camera + voice. For this demo, type what you harvested.
-            </p>
-            <textarea
-              className="input mt-5 min-h-24 w-full"
-              placeholder='e.g. "I have 30 kilos of green chilli, harvested today"'
-              value={voiceText}
-              onChange={(e) => setVoiceText(e.target.value)}
-            />
-            <div className="mt-4 w-full">
-              <label className="label">Or pick the crop manually</label>
+          <div className="mx-auto max-w-xl">
+            <div className="font-display text-lg font-bold">List your harvest</div>
+            <p className="mt-1 text-sm text-stone-500">Pick the crop and quantity — the AI suggests a price, then you review and publish.</p>
+            <div className="mt-5">
+              <label className="label">Crop</label>
               <div className="flex flex-wrap gap-2">
                 {CROPS.map(([slug, label]) => (
-                  <button key={slug} onClick={() => setManualCrop(manualCrop === slug ? "" : slug)}
+                  <button key={slug} onClick={() => setManualCrop(slug)}
                     className={`badge px-3 py-1.5 ${manualCrop === slug ? "bg-brand-600 text-white" : "bg-white text-stone-700 shadow-card hover:bg-brand-50"}`}>
                     {label}
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="mt-4">
+              <label className="label">Quantity (kg)</label>
+              <input type="number" min="1" className="input" placeholder="e.g. 30" value={qty} onChange={(e) => setQty(e.target.value)} />
             </div>
           </div>
           {error && <div className="mx-auto mt-4 max-w-xl rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
@@ -203,7 +199,7 @@ export default function SellPage() {
               </div>
               {error && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
               <div className="flex gap-3">
-                <button className="btn-secondary" onClick={() => setStage("capture")} disabled={busy}>← Redescribe</button>
+                <button className="btn-secondary" onClick={() => setStage("capture")} disabled={busy}>← Edit details</button>
                 <button className="btn-primary flex-1" onClick={publish} disabled={busy}>
                   {busy ? "Publishing…" : "Publish listing 🚀"}
                 </button>

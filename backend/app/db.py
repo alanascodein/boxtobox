@@ -121,7 +121,7 @@ class BuyerRequest(Base):
 
 
 class PriceObservation(Base):
-    """Synthetic historical market price per crop per day."""
+    """Historical market price per crop per day (synthetic or real AGMARKNET)."""
     __tablename__ = "price_observations"
     id = Column(String, primary_key=True, default=uid)
     crop = Column(String, index=True, nullable=False)
@@ -130,6 +130,8 @@ class PriceObservation(Base):
     modal_price = Column(Float, nullable=False)
     min_price = Column(Float, nullable=False)
     max_price = Column(Float, nullable=False)
+    source = Column(String, default="synthetic")  # synthetic | agmarknet | agmarknet_cache
+    market_name = Column(String, default="")       # reporting market (real data only)
 
 
 class DemandSignal(Base):
@@ -153,6 +155,21 @@ class CopilotLog(Base):
 
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
+    _migrate()
+
+
+def _migrate() -> None:
+    """Tiny idempotent SQLite migrations for columns added after first release."""
+    if not settings.DATABASE_URL.startswith("sqlite"):
+        return
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        cols = {r[1] for r in conn.execute(text("PRAGMA table_info(price_observations)")).fetchall()}
+        if "source" not in cols:
+            conn.execute(text("ALTER TABLE price_observations ADD COLUMN source VARCHAR DEFAULT 'synthetic'"))
+        if "market_name" not in cols:
+            conn.execute(text("ALTER TABLE price_observations ADD COLUMN market_name VARCHAR DEFAULT ''"))
+        conn.commit()
 
 
 def get_db():

@@ -1,8 +1,23 @@
 # 🌱 FarmMesh AI
 
-**AI-powered agricultural marketplace for India** — built from `FarmMesh_AI_PRD_v0.2.md`.
+**AI-powered agricultural marketplace for India** — built from `FarmMesh_AI_PRD_v0.2.md`, now extended with the **AMIE feasibility engine** from `AMIE_Final_Revised_PRD.md`.
 
 Everyone gets a clean, fast marketplace for farm-fresh produce. Farmers/vendors additionally unlock an **AI vendor workspace**: harvest analysis, price recommendation, buyer matching, supply aggregation, logistics estimation, market intelligence and a conversational copilot.
+
+## 🧭 AMIE — Feasibility Lab (new)
+
+AMIE (Agricultural Market Infeasibility Engine) answers the question no price chart can: **when will this market physically break?** It runs a deterministic, day-by-day cascading simulation of future supply, capacity and demand — no LLM, no magic numbers:
+
+- **Market analysis from live data** — real price observations, demand signals, active listings and buyer requests from the DB (the old `random.uniform` placeholder is gone).
+- **Cascading simulation** — each day: arrivals → redirect → processing (FIFO) → storage (bounded by capacity *and* daily intake) → emergency procurement → buyer absorption → spoilage after the perish window. Day *d*'s overflow degrades day *d+1*.
+- **Infeasibility detection** — first failure day/node/deficit with a WHAT/WHEN/WHERE/HOW MUCH/WHY explanation, ranked bottlenecks, and P10/P50/P90 supply bands.
+- **Critical commitments** — greedy heuristic finding which synchronized farmer lots cause the failure.
+- **Intervention lab** — redirect / store / reschedule / process / procure, sized from the measured deficit, each re-simulated with costs and net benefit; best plan shown as a no-intervention vs intervention counterfactual.
+- 8 disturbance scenarios (synchronized harvest, processor outage, buyer withdrawal, compound shock…), fixed seed 42 → reproducible results.
+
+**Where:** vendor workspace → *Feasibility Lab* (or `POST /api/vendor/amie/analyze`, `/api/vendor/amie/counterfactual`).
+
+**Tests:** `cd backend && python -m pytest tests/test_feasibility.py -q` — known feasible/infeasible cases, capacity/conservation/time/nonnegativity invariants, monotonicity stress tests (PRD §29/§31/§32).
 
 ## Stack (per PRD §22/§78)
 
@@ -73,6 +88,8 @@ POST /api/vendor/ai/price                      GET  /api/vendor/ai/match/{listin
 POST /api/vendor/ai/aggregate                  POST /api/vendor/ai/logistics
 GET  /api/vendor/ai/demand/{crop}              GET  /api/vendor/ai/crop-recommendation
 GET  /api/vendor/intelligence/outlook          POST /api/vendor/intelligence/simulate
-POST /api/vendor/copilot                       GET  /api/vendor/earnings | dashboard
+POST /api/vendor/amie/analyze                  POST /api/vendor/amie/counterfactual
+GET  /api/vendor/amie/scenarios                POST /api/vendor/copilot
+GET  /api/vendor/earnings | dashboard
 GET  /api/admin/metrics                        GET  /api/health
 ```

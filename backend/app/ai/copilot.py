@@ -83,6 +83,23 @@ def _rule_answer(q: str, tool: str, data, vendor_name: str) -> str:
             f"Demand for {d['crop'].replace('_', ' ')} is trending {direction} ~{abs(d['next_7d_pct'])}% over the next 7 days "
             f"(confidence: {d['confidence']}). 30-day outlook: {d['next_30d_pct']:+.0f}%."
         )
+    if tool == "amie":
+        d = data
+        cf = d.get("counterfactual") or {}
+        first = d.get("first_failure") or {}
+        if d.get("system_status") == "GREEN":
+            return (
+                f"AMIE checked the next {d['horizon_days']} days day-by-day: the market stays feasible. "
+                f"Peak capacity utilization {d.get('peak_utilization_pct', 0):.0f}%. "
+                "Run a disturbance scenario in Market Intel → Feasibility Lab to stress-test it."
+            )
+        return (
+            f"AMIE's cascade simulation flags {d.get('system_status')} — day-by-day, total unabsorbed produce "
+            f"{d['totals']['unabsorbed_kg']:,.0f} kg"
+            + (f", first failure day {first.get('day')}: {first.get('node_name')} deficit "
+               f"{first.get('deficit_kg'):,.0f} kg ({first.get('why')})" if first else "")
+            + (f". Best fix: {cf.get('label')} — rescues {cf.get('rescued_kg', 0):,.0f} kg for ₹{cf.get('cost', 0):,.0f}." if cf else ".")
+        )
     if tool == "listings":
         if not data:
             return "You have no active listings. Head to Sell → photograph your harvest to create one in under a minute."
@@ -111,6 +128,12 @@ TOOLS = [
         "parameters": {"type": "object", "properties": {}, "required": []},
     }},
     {"type": "function", "function": {
+        "name": "get_feasibility_check",
+        "description": "AMIE day-by-day feasibility cascade for a crop: detects future market infeasibility and suggests interventions",
+        "parameters": {"type": "object", "properties": {
+            "crop": {"type": "string"}, "scenario": {"type": "string"}}, "required": ["crop"]},
+    }},
+    {"type": "function", "function": {
         "name": "get_demand_forecast",
         "description": "7/30-day demand outlook for a crop",
         "parameters": {"type": "object", "properties": {"crop": {"type": "string"}}, "required": ["crop"]},
@@ -135,6 +158,8 @@ async def answer(db: Session, vendor: VendorProfile, user, question: str) -> dic
         intent = "price"
     elif any(w in q for w in ("earn", "income", "revenue", "payout", "paid me")):
         intent = "earnings"
+    elif any(w in q for w in ("feasib", "infeasib", "bottleneck", "overload", "capacity", "what happens if", "simulate the market", "spoiled", "go to waste", "unsold")):
+        intent = "amie"
     elif any(w in q for w in ("demand", "outlook", "forecast", "trend", "next week", "grow next")):
         intent = "demand"
     elif any(w in q for w in ("listing", "inventory", "stock", "have left", "unsold")):
@@ -152,6 +177,10 @@ async def answer(db: Session, vendor: VendorProfile, user, question: str) -> dic
         data = recommend_price(db, crop, 30, "A", vendor.district)
     elif intent == "earnings":
         data = _tool_earnings(db, vendor)
+    elif intent == "amie":
+        from .feasibility import extract_market_stats, run_amie
+        stats = extract_market_stats(db, crop or "tomato", vendor.district or "Ernakulam")
+        data = run_amie(stats, horizon_days=7, scenario_name="synchronized_harvest", seed=42, with_interventions=False)
     elif intent == "demand":
         data = forecast_demand(db, crop or "tomato")
     elif intent == "listings":

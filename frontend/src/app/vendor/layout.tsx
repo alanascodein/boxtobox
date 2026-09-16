@@ -11,6 +11,7 @@ const NAV = [
   { href: "/vendor/sell", label: "Sell Harvest", emoji: "📸" },
   { href: "/vendor/listings", label: "My Listings", emoji: "🧺" },
   { href: "/vendor/market-intel", label: "Market Intel", emoji: "📊" },
+  { href: "/vendor/feasibility", label: "Feasibility Lab", emoji: "🧭" },
   { href: "/vendor/farm-plan", label: "Farm Plan", emoji: "🌾" },
   { href: "/vendor/earnings", label: "Earnings", emoji: "💰" },
 ];

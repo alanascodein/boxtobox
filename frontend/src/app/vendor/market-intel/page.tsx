@@ -13,12 +13,6 @@ type Sim = {
   intervention: { action: string; price: number; net_30kg: number; delta: number }; confidence: string;
 };
 
-type Agg = {
-  crop: string; required_kg: number; fulfilled_kg: number; complete: boolean; farmer_count: number;
-  farmers: { farm_name: string; farmer_location: string; distance_km: number; take_kg: number; price_per_kg: number }[];
-  total_cost: number; avg_price: number; farmers_net_payout: number;
-};
-
 const RISK_STYLES: Record<string, string> = {
   LOW: "bg-brand-100 text-brand-700", MEDIUM: "bg-amber-100 text-amber-700",
   HIGH: "bg-orange-100 text-orange-700", CRITICAL: "bg-red-100 text-red-700",
@@ -37,10 +31,6 @@ export default function MarketIntelPage() {
   const [demandDelta, setDemandDelta] = useState(-15);
   const [sim, setSim] = useState<Sim | null>(null);
   const [simBusy, setSimBusy] = useState(false);
-  const [agg, setAgg] = useState<Agg | null>(null);
-  const [aggCrop, setAggCrop] = useState("tomato");
-  const [aggQty, setAggQty] = useState("100");
-  const [aggBusy, setAggBusy] = useState(false);
 
   useEffect(() => {
     api<Outlook[]>("/api/vendor/intelligence/outlook").then((o) => { setOutlook(o); setLoaded(true); });
@@ -56,19 +46,6 @@ export default function MarketIntelPage() {
       setSim(s);
     } finally {
       setSimBusy(false);
-    }
-  }
-
-  async function runAgg() {
-    setAggBusy(true);
-    try {
-      const a = await api<Agg>("/api/vendor/ai/aggregate", {
-        method: "POST",
-        body: JSON.stringify({ crop: aggCrop, quantity_kg: Number(aggQty), location: "Kochi" }),
-      });
-      setAgg(a);
-    } finally {
-      setAggBusy(false);
     }
   }
 
@@ -115,7 +92,7 @@ export default function MarketIntelPage() {
         </div>
       )}
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
+      <div className="mt-8">
         {/* What-if simulation */}
         <div className="card p-6">
           <h2 className="font-display text-lg font-bold">🔮 What-if simulation</h2>
@@ -153,55 +130,6 @@ export default function MarketIntelPage() {
                 <div className="mt-1 font-display text-xl font-bold text-brand-700">{formatINR(sim.intervention.net_30kg)}</div>
                 <div className={`text-sm font-semibold ${sim.intervention.delta >= 0 ? "text-brand-600" : "text-red-500"}`}>
                   {sim.intervention.delta >= 0 ? "+" : ""}{formatINR(sim.intervention.delta)} vs. doing nothing
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Supply aggregation */}
-        <div className="card p-6">
-          <h2 className="font-display text-lg font-bold">🤝 Supply aggregation</h2>
-          <p className="mt-1 text-sm text-stone-500">Combine small lots from nearby farms into one deliverable order.</p>
-          <div className="mt-4 grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Crop</label>
-              <select className="input" value={aggCrop} onChange={(e) => setAggCrop(e.target.value)}>
-                {CROPS.map(([s, l]) => <option key={s} value={s}>{l}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Required (kg)</label>
-              <input type="number" min="10" className="input" value={aggQty} onChange={(e) => setAggQty(e.target.value)} />
-            </div>
-          </div>
-          <button className="btn-primary mt-4 w-full" onClick={runAgg} disabled={aggBusy}>{aggBusy ? "Optimising…" : "Find aggregated supply"}</button>
-
-          {agg && (
-            <div className="mt-5">
-              <div className={`badge ${agg.complete ? "bg-brand-100 text-brand-700" : "bg-amber-100 text-amber-700"}`}>
-                {agg.complete ? "✓ Requirement fulfilable" : `Partial: ${agg.fulfilled_kg} of ${agg.required_kg} kg`}
-              </div>
-              <div className="mt-3 space-y-2">
-                {agg.farmers.map((f, i) => (
-                  <div key={i} className="flex items-center justify-between rounded-xl bg-stone-50 px-4 py-2.5 text-sm">
-                    <span>🌱 <b>{f.farm_name}</b> — {f.farmer_location} ({f.distance_km} km)</span>
-                    <span className="font-medium">{f.take_kg} kg × {formatINR(f.price_per_kg)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-xl bg-stone-50 p-3">
-                  <div className="font-display font-bold">{agg.farmer_count}</div>
-                  <div className="text-[11px] text-stone-400">farms combined</div>
-                </div>
-                <div className="rounded-xl bg-stone-50 p-3">
-                  <div className="font-display font-bold">{formatINR(agg.avg_price)}</div>
-                  <div className="text-[11px] text-stone-400">avg ₹/kg</div>
-                </div>
-                <div className="rounded-xl bg-brand-50 p-3">
-                  <div className="font-display font-bold text-brand-700">{formatINR(agg.farmers_net_payout)}</div>
-                  <div className="text-[11px] text-brand-600">farmers' net</div>
                 </div>
               </div>
             </div>

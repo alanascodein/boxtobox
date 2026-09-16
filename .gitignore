@@ -1,7 +1,7 @@
 # Python
 __pycache__/
 *.pyc
-backend/farmmesh.db
+backend/*.db
 backend/.env
 backend/server.log
 
@@ -9,6 +9,7 @@ backend/server.log
 frontend/node_modules/
 frontend/.next/
 frontend/.env.local
+*.tsbuildinfo
 
 # Misc
 frontend.log
