@@ -1,6 +1,6 @@
 # 🌱 FarmMesh AI
 
-**AI-powered agricultural marketplace for India** — built from `FarmMesh_AI_PRD_v0.2.md`, now extended with the **AMIE feasibility engine** from `AMIE_Final_Revised_PRD.md`.
+**AI-powered agricultural marketplace for India** now extended with the **AMIE feasibility engine** from `AMIE_Final_Revised_PRD.md`.
 
 Everyone gets a clean, fast marketplace for farm-fresh produce. Farmers/vendors additionally unlock an **AI vendor workspace**: harvest analysis, price recommendation, buyer matching, supply aggregation, logistics estimation, market intelligence and a conversational copilot.
 
